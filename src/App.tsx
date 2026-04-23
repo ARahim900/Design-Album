@@ -149,7 +149,7 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Setup GSAP ScrollTrigger for slides
+  // Setup GSAP ScrollTrigger for slides with 3D floating rotation
   useGSAP(() => {
     // Small delay to ensure DOM is ready and images start rendering
     setTimeout(() => {
@@ -158,71 +158,118 @@ export default function App() {
       slidesRef.current.forEach((slide, i) => {
         if (!slide) return;
         
-        const mediaWrap = slide.querySelector('.media-wrap');
+        const mediaWrap = slide.querySelector('.media-wrap') as HTMLElement;
         const img = slide.querySelector('.media-wrap img');
         const captionCard = slide.querySelector('.caption-card');
         
-        // Initial state before entering viewport
-        gsap.set(mediaWrap, { opacity: 0.3, scale: 0.85, filter: 'saturate(0.5)' });
-        gsap.set(img, { scale: 1.15 });
+        // Initial state before entering viewport — tilted and faded
+        gsap.set(mediaWrap, { 
+          opacity: 0.15, 
+          scale: 0.78,
+          rotateX: -12,
+          rotateY: i % 2 === 0 ? -18 : 18, // Alternate tilt direction
+          rotateZ: i % 2 === 0 ? -3 : 3,
+          translateZ: -80,
+          filter: 'saturate(0.3) brightness(0.7)',
+          transformPerspective: 1200,
+        });
+        gsap.set(img, { scale: 1.2 });
         gsap.set(captionCard, { opacity: 0, y: 60 });
 
-        // Animation for entering and centering
-        gsap.to(mediaWrap, {
-          opacity: 1,
-          scale: 1,
-          filter: 'saturate(1)',
-          scrollTrigger: {
-            trigger: slide,
-            start: "top 85%",
-            end: "center center",
-            scrub: 1.5, // 1.5s smoothing
-            onEnter: () => setActiveIndex(i),
-            onEnterBack: () => setActiveIndex(i),
+        // ─── 3D FLOATING CIRCULAR ROTATION ───
+        // Drive rotateX & rotateY through a circular orbit path using ScrollTrigger progress
+        // This creates the illusion of the image orbiting in 3D space
+        const orbitRadius = 15; // degrees of rotation amplitude
+        const floatHeight = 30; // translateZ peak
+        
+        ScrollTrigger.create({
+          trigger: slide,
+          start: "top 90%",
+          end: "bottom 10%",
+          scrub: 1.8,
+          onEnter: () => {
+            setActiveIndex(i);
+            mediaWrap?.classList.add('float-active');
+          },
+          onEnterBack: () => {
+            setActiveIndex(i);
+            mediaWrap?.classList.add('float-active');
+          },
+          onLeave: () => mediaWrap?.classList.remove('float-active'),
+          onLeaveBack: () => mediaWrap?.classList.remove('float-active'),
+          onUpdate: (self) => {
+            const p = self.progress; // 0 → 1
+            
+            // Map progress to a full orbit cycle (0 → 2π)
+            const angle = p * Math.PI * 2;
+            
+            // Circular orbit: sin/cos create smooth circular motion
+            const rX = Math.sin(angle) * orbitRadius;
+            const rY = Math.cos(angle) * orbitRadius;
+            const rZ = Math.sin(angle * 0.5) * 2; // Subtle roll
+            
+            // Float up at center of scroll, settle at edges
+            // Bell curve: peaks at p=0.5
+            const floatZ = Math.sin(p * Math.PI) * floatHeight;
+            
+            // Opacity: fade in → full → fade out
+            const opacity = Math.sin(p * Math.PI); // 0→1→0 bell curve
+            const clampedOpacity = Math.max(0.15, Math.min(1, opacity * 1.6));
+            
+            // Scale: small → full → small
+            const scale = 0.78 + Math.sin(p * Math.PI) * 0.22;
+            
+            // Saturation: desaturated → vivid → desaturated
+            const sat = 0.3 + Math.sin(p * Math.PI) * 0.7;
+            const brightness = 0.7 + Math.sin(p * Math.PI) * 0.3;
+            
+            gsap.set(mediaWrap, {
+              rotateX: rX,
+              rotateY: rY * (i % 2 === 0 ? 1 : -1), // Alternate direction per slide
+              rotateZ: rZ,
+              translateZ: floatZ,
+              scale: scale,
+              opacity: clampedOpacity,
+              filter: `saturate(${sat}) brightness(${brightness})`,
+              transformPerspective: 1200,
+            });
           }
         });
 
-        gsap.to(img, {
-          scale: 1,
-          scrollTrigger: {
-            trigger: slide,
-            start: "top 85%",
-            end: "center center",
-            scrub: 1.5,
+        // Inner image parallax zoom
+        gsap.fromTo(img, 
+          { scale: 1.2 },
+          {
+            scale: 1,
+            scrollTrigger: {
+              trigger: slide,
+              start: "top 85%",
+              end: "center center",
+              scrub: 1.5,
+            }
           }
-        });
+        );
 
+        // Caption card reveal
         gsap.to(captionCard, {
           opacity: 1,
           y: 0,
           scrollTrigger: {
             trigger: slide,
-            start: "top 75%",
-            end: "center center",
+            start: "top 70%",
+            end: "top 30%",
             scrub: 1.5,
           }
         });
 
-        // Animation for leaving viewport (scrolling past)
-        gsap.to(mediaWrap, {
-          opacity: 0.3,
-          scale: 0.9,
-          filter: 'saturate(0.5)',
-          scrollTrigger: {
-            trigger: slide,
-            start: "center center",
-            end: "bottom 15%",
-            scrub: 1.5,
-          }
-        });
-
+        // Caption card exit
         gsap.to(captionCard, {
           opacity: 0,
           y: -40,
           scrollTrigger: {
             trigger: slide,
-            start: "center center",
-            end: "bottom 25%",
+            start: "bottom 70%",
+            end: "bottom 30%",
             scrub: 1.5,
           }
         });
@@ -467,8 +514,8 @@ export default function App() {
 
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true" style={{ background: 'transparent', border: 'none', width: '32px', height: '32px', overflow: 'hidden' }}>
-            <img src="/logo.jpg" alt="Home Interior Exterior Design" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <div className="brand-mark" aria-hidden="true" style={{ background: 'transparent', border: 'none', width: '40px', height: '40px', overflow: 'hidden' }}>
+            <img src="/logo.png" alt="Home Interior Exterior Design" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <div className="brand-text">
             <strong>HE Home</strong>
